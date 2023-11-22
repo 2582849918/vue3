@@ -1,0 +1,57 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body,
+html,
+#app {
+  height: 100%;
+  //background-color: #EFEEEE;
+  /* 长按鼠标并滑动的时候回选中框内的内容，这里禁止选中所有文本。 */
+  -moz-user-select: none;
+  /*火狐*/
+  -webkit-user-select: none;
+  /*webkit浏览器*/
+  -ms-user-select: none;
+  /*IE10*/
+  -khtml-user-select: none;
+  /*早期浏览器*/
+  user-select: none;
+}
+
+
+li {
+  list-style: none;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.y-center {
+  align-items: center;
+}
+
+.x-center {
+  justify-content: center;
+}
+
+.x-between {
+  justify-content: space-between;
+}
+
+.x-end {
+  justify-content: end;
+}
