@@ -1,0 +1,439 @@
+<template>
+  <div class="container">
+    <el-row :gutter="20">
+      <!-- 左侧区域选择音视频文件 -->
+      <el-col :span="16" v-loading="isLoading">
+        <div class="upload-section">
+          <div v-if="videoUrl" class="video-preview">\
+            <div class="close-btn" @click="handleRemoveVideo">
+              <i class="el-icon-close"></i>
+            </div>
+            <video :src="videoUrl" controls style="max-width: 80%; max-height: 80%"></video>
+          </div>
+          <div v-else class="upload-placeholder" @click="handleUploadClick">
+            <p>上传视频或语音文件拖放至此处</p>
+            <p class="sub-text">建议视频或音频时长不超过30分钟</p>
+          </div>
+        </div>
+        <div class="upload-section" style="height: 50px">
+          <el-progress :percentage="uploadProgress" style="width: 80%"></el-progress>
+        </div>
+      </el-col>
+
+      <!-- 右侧区域选择原始语言选择,目标语言选择,位置选择,开始生成 -->
+      <el-col :span="8">
+        <div class="options-section">
+          <el-form :model="form" label-position="top" class="form-section">
+            <el-form-item label="选择原始语言">
+              <el-select v-model="form.preLanguage" placeholder="选择原始语言"
+                style="width: 100%">
+                <el-option v-for="item in languageOptions" :key="item.value" :label="item.label" :value="item.value">
+                </el-option>
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="选择目标语言">
+              <el-select v-model="form.language" placeholder="选择目标语言"
+                style="width: 100%">
+                <el-option v-for="item in languageOptions" :key="item.value" :label="item.label" :value="item.value">
+                </el-option>
+              </el-select>
+            </el-form-item>
+
+            <p style="color: #606266;">视频生成位置</p>
+            <el-input v-model="form.outputPath" @click="selectPosition"
+              placeholder="生成位置" style="background-color: #7a7a7a" />
+            <el-form-item>
+              <el-button class="startBtn" type="primary" @click="handleGenerateClick" :disabled="isButtonDisabled">开始生成</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<script>
+import { getAlgoAccessToken } from '@/api/server/auth';
+export default {
+  data() {
+    return {
+      form: {
+        language: '',
+        outputPath: '',
+        preLanguage: '',
+      },
+      languageOptions: [
+        { label: '中文', value: 'zh-CN' },
+        { label: '英文', value: 'en-US' },
+        { label: '法语', value: 'fr-FR' }, 
+      ],
+      videoUrl: '', // 新增：用于存储视频的本地 URL
+      uploadProgress: 0, // 更新上传进度
+      outputPath: '',
+      isLoading: false,
+      isButtonDisabled: false,
+    };
+  },
+  computed: {
+    currentVoice() {
+      return this.voiceOptions.find((v) => v.value === this.form.voice) || {};
+    },
+    filteredVoices() {
+      return this.voices.filter((voice) => {
+        return (
+          (this.queryForm.language
+            ? voice.lang.includes(this.queryForm.language)
+            : true) &&
+          (this.queryForm.gender
+            ? voice.gender === this.queryForm.gender
+            : true) &&
+          (this.queryForm.age ? voice.age === this.queryForm.age : true)
+        );
+      });
+    },
+  },
+  methods: {
+    handleRemoveVideo() {
+      this.videoUrl = '';
+    },
+
+    async selectPosition() {
+      try {
+        const result = await window.electron.selectFolder();
+        if (result && result[0]) {
+          this.form.outputPath = result[0]; // 设置文件夹的完整路径
+        }
+      } catch (error) {
+        console.error('Error selecting folder:', error);
+      }
+    },
+    importVoice() {
+      console.log('import voice...');
+    },
+    resetFilters() {
+      this.queryForm = {
+        language: '',
+        gender: '',
+        age: '',
+      };
+      console.log('Reset filters...');
+    },
+    playVoice(voice) {
+      console.log('Play voice:', voice.name);
+      // 实现播放逻辑
+    },
+    toggleFavorite(voice) {
+      voice.favorite = !voice.favorite;
+    },
+
+    async handleUploadClick() {
+      // 模拟点击上传按钮
+      // this.$refs.uploadRef.$el.querySelector('input').click();
+      this.uploadProgress = 0;
+
+      let filePath = await window.electron.selectVideosAndAudio();
+      if (filePath) {
+        this.uploadProgress = 100;
+        this.videoUrl = filePath[0];
+      } else {
+        this.$message.success("取消上传！")
+      }
+    },
+
+    async handleGenerateClick() {
+      // 表单参数校验
+      if (!this.videoUrl) {
+        this.$message.error('请先上传视频或音频文件');
+        return;
+      }
+      if (!this.form.language) {
+        this.$message.error('请选择目标语言');
+        return;
+      }
+      if (!this.form.outputPath) {
+        this.$message.error('请选择生成位置');
+        return;
+      }
+
+      const downloadAccessToken = await getAlgoAccessToken();
+      if (!downloadAccessToken || !downloadAccessToken.success) {
+        this.$message({
+          message: '无效的 access token',
+          type: 'warning',
+        });
+        return;
+      }
+
+      // 获取访问令牌
+      try {
+        const downloadAccessToken = await getAlgoAccessToken();
+        if (!downloadAccessToken || !downloadAccessToken.success) {
+          this.$message({
+            message: '无效的 access token',
+            type: 'warning',
+          });
+          return;
+        }
+
+        const token = downloadAccessToken.algo_access_token;
+        const userInfo = localStorage.getItem('userInfo');
+        const fileNameWithExtension = this.videoUrl.split('\\').pop().split(".");
+        let outFilePath = fileNameWithExtension[0] + "_trans." + fileNameWithExtension[1]
+        const outputFile = this.form.outputPath + "\\" + outFilePath;
+        // 参数
+        const params = {
+          target_language: this.form.language,
+          original_language: this.form.preLanguage,
+          output_video_path: outputFile,
+          input_video_path: this.videoUrl,
+          token: token,
+          userInfo: userInfo,
+          event: 'EVENT_VIDEO_TRANSLATE_START',
+        };
+
+        console.log('传入模型参数 :', params);
+        this.isButtonDisabled = true;
+        this.isLoading = true
+
+        //接口请求
+        let result = null;
+        result = await window.electron.executeTask("algorithm.exe", params);
+        console.log('result :', result);
+
+        // 操作完成，更新加载状态
+        this.isButtonDisabled = false
+        this.isLoading = false;
+
+        // 根据返回结果显示消息
+        if (result.success) {
+          this.videoUrl = outputFile;
+          this.$message.success('视频生成成功！');
+        } else {
+          // 处理生成失败的情况 message 状态码等
+          this.$message.error('视频生成失败！');
+        }
+
+      } catch (error) {
+        // 错误捕获并输出
+        this.isButtonDisabled = false
+        this.isLoading = false; // 确保在错误时关闭加载状态
+        console.error('生成视频过程中出错:', error);
+        this.$message.error('生成视频过程中出错，请稍后再试');
+      }
+    },
+  },
+  watch: {
+    videoUrl(newUrl, oldUrl) {
+      if (oldUrl) {
+        URL.revokeObjectURL(oldUrl);
+      }
+    },
+  },
+  beforeDestroy() {
+    if (this.videoUrl) {
+      URL.revokeObjectURL(this.videoUrl);
+    }
+  },
+};
+</script>
+
+<style scoped>
+.container {
+  background: #1c1c1c;
+  /* 背景为深色 */
+  height: 100vh;
+  color: #fff;
+}
+
+.upload-section {
+  height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  position: relative;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.upload-placeholder {
+  text-align: center;
+  cursor: pointer;
+  color: #aaa;
+  padding: 145px 200px;
+  background: #202020;
+  border-radius: 8px;
+  border: 2px solid #FFFFFF;
+}
+
+.upload-placeholder i {
+  font-size: 40px;
+  margin-bottom: 10px;
+  display: inline-block;
+}
+
+.sub-text {
+  font-size: 12px;
+  color: #666;
+}
+
+.options-section {
+  background: #2f2f2f;
+  height: 100vh;
+  border-radius: 4px;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.form-section .el-form-item__content {
+  color: #fff;
+}
+
+.el-form-item label {
+  color: #fff !important;
+  display: block;         /* 新增 */
+  text-align: left;       /* 新增 */
+  width: 100%;            /* 新增 */
+  margin-bottom: 8px;     /* 新增 */
+}
+
+.el-select, .el-input {
+  width: 100% !important;
+}
+
+/* 调整视频生成位置文字对齐 */
+.options-section p {
+  text-align: center;
+  margin: 12px 0 8px;
+  font-size: 14px;
+}
+
+.el-select .el-input__inner {
+  background-color: #3f3f3f;
+  border-color: #3f3f3f;
+  color: #fff;
+}
+
+.el-radio-button__inner {
+  background-color: #3f3f3f;
+  color: #fff;
+  border-color: #3f3f3f;
+}
+
+.el-radio-button__inner:hover {
+  color: #ffffff;
+  border-color: #409eff;
+}
+
+.el-button--primary {
+  background-color: #409eff;
+  border-color: #409eff;
+}
+
+/* 自定义禁用按钮的样式 */
+.el-button.is-disabled {
+  background-color: #dcdfe6;
+  /* 修改禁用按钮的背景色 */
+  border-color: #dcdfe6;
+  /* 修改禁用按钮的边框颜色 */
+  color: #b0b4b8;
+  /* 修改禁用按钮的字体颜色 */
+}
+
+.voice-selection {
+  margin-bottom: 10px;
+}
+
+.voice-info {
+  display: flex;
+  flex-direction: column;
+  color: #ccc;
+}
+
+.voice-sub {
+  font-size: 12px;
+  color: #666;
+}
+
+.startBtn {
+  margin-top: 90%;
+  width: 100%;
+}
+
+.el-icon-video-play {
+  margin-right: 10px;
+  color: #000;
+  font-size: 20px;
+}
+
+.favorite {
+  color: orange !important;
+}
+
+.video-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/*取消上传开始*/
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  cursor: pointer;
+  background: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn i {
+  color: yellow;
+  font-size: 14px;
+}
+
+.close-btn:hover {
+  background: lawngreen;
+}
+/*取消上传结束*/
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.spinner {
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-top: 4px solid #fff;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+</style>
